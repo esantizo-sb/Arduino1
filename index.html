@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evaluación Interactiva de Arduino</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+            color: #334155;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            width: 100%;
+            max-width: 1200px;
+        }
+        .card {
+            background-color: #fff;
+            border-radius: 16px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+            padding: 24px;
+            transition: all 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
+        }
+        .login-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        .led-container {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-end;
+            height: 120px;
+        }
+        .led-bulb {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background-color: #e2e8f0;
+            border: 2px solid #94a3b8;
+            box-shadow: inset 0 0 5px rgba(0,0,0,0.2);
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+        }
+        .led-active {
+            box-shadow: 0 0 15px currentColor;
+            animation: pulse 1s infinite alternate;
+        }
+        @keyframes pulse {
+            from { transform: scale(1); }
+            to { transform: scale(1.1); }
+        }
+        .pin-line {
+            width: 2px;
+            height: 40px;
+            background-color: #64748b;
+            margin-top: 5px;
+        }
+        .pin-label {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 4px;
+        }
+        .code-input {
+            width: 100%;
+            height: 250px;
+            background-color: #1e293b;
+            color: #f8fafc;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: monospace;
+            resize: vertical;
+            line-height: 1.5;
+            font-size: 0.875rem;
+            outline: none;
+            border: 2px solid transparent;
+            transition: border-color 0.2s;
+        }
+        .code-input:focus {
+            border-color: #3b82f6;
+        }
+        .line-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        .correct {
+            color: #15803d;
+            background-color: #dcfce7;
+        }
+        .incorrect {
+            color: #b91c1c;
+            background-color: #fee2e2;
+        }
+        .feedback-container {
+            background-color: #f1f5f9;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 16px;
+            font-size: 0.875rem;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: #fff;
+            padding: 32px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            width: 90%;
+            max-width: 400px;
+        }
+        .responsive-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px;
+        }
+        @media (min-width: 768px) {
+            .responsive-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        .final-screen {
+            background-color: #fff;
+            border-radius: 16px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+            padding: 48px 24px;
+            text-align: center;
+            width: 100%;
+            max-width: 600px;
+            margin-top: 24px;
+        }
+        .report-section {
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 16px;
+            margin-bottom: 16px;
+        }
+        .code-block {
+            background-color: #1e293b;
+            color: #f8fafc;
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        #score-progress-bar {
+            transition: width 0.8s ease-in-out, background-color 0.8s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+
+    <!-- Modal de Alerta -->
+    <div id="alert-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3 class="text-xl font-bold mb-4" id="modal-title"></h3>
+            <p class="mb-6" id="modal-message"></p>
+            <button onclick="hideAlert()" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300">Aceptar</button>
+        </div>
+    </div>
+
+    <!-- Pantalla de Inicio de Sesión -->
+    <div id="login-screen" class="login-container w-full max-w-md p-6 rounded-xl shadow-lg bg-white">
+        <h1 class="text-3xl font-bold text-center mb-6 text-gray-800">Evaluación de Arduino</h1>
+        <div class="mb-4 w-full">
+            <label for="student-key" class="block text-gray-700 font-semibold mb-2">Clave del Estudiante</label>
+            <input type="text" id="student-key" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200" placeholder="Ingresa un número del 1 al 33 o la clave de admin">
+        </div>
+        <div class="mb-6 w-full">
+            <label for="student-name" class="block text-gray-700 font-semibold mb-2">Nombre Completo</label>
+            <input type="text" id="student-name" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200" placeholder="Nombre y apellidos">
+        </div>
+        <button onclick="startEvaluation()" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition duration-300 transform hover:scale-105">
+            Iniciar Evaluación
+        </button>
+    </div>
+
+    <!-- Pantalla de Evaluación (Preguntas) -->
+    <div id="question-screen" class="container hidden">
+        <header class="text-center">
+            <h1 class="text-3xl font-bold text-gray-800">Preguntas Teóricas</h1>
+            <p id="question-score-display" class="mt-4 text-xl font-bold text-blue-600">Puntuación: 0 / 150</p>
+            <p id="question-number" class="mt-2 text-gray-600">Pregunta 1 de 5</p>
+        </header>
+        <div class="card mt-4">
+            <p id="current-question" class="text-xl font-semibold mb-6"></p>
+            <div id="answer-options" class="flex flex-col space-y-4"></div>
+            <button onclick="submitQuestion()" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-lg mt-8 transition duration-300 transform hover:scale-105">
+                Responder
+            </button>
+        </div>
+        <div id="question-feedback" class="feedback-container hidden">
+            <h3 class="font-bold text-gray-800 mb-2">Resultado</h3>
+            <p id="question-feedback-text"></p>
+        </div>
+    </div>
+
+    <!-- Pantalla de Evaluación (Código) -->
+    <div id="evaluation-screen" class="container hidden">
+        <header class="text-center">
+            <h1 class="text-3xl font-bold text-gray-800">Tarea: Secuencia de LEDs</h1>
+            <div id="admin-message" class="hidden mt-4 text-green-600 font-bold">
+                <p>Modo Administrador: Las soluciones están disponibles en el editor de código.</p>
+            </div>
+            <p id="score-display" class="mt-4 text-xl font-bold text-blue-600">Puntuación: 0 / 150</p>
+            <div class="mt-2 text-gray-600">
+                <label for="sequence-selector" class="block text-sm font-semibold mb-2">Seleccionar Tarea:</label>
+                <select id="sequence-selector" class="mb-4 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200"></select>
+                <p>Escribe el código para Arduino que replique la siguiente secuencia de LEDs. El orden de encendido y apagado es crucial.</p>
+                <ul id="instructions-list" class="list-disc list-inside text-left mt-4 mx-auto w-fit"></ul>
+            </div>
+        </header>
+
+        <div class="responsive-grid">
+            <!-- Sección de Simulación -->
+            <div class="card">
+                <h2 class="text-xl font-bold mb-4">Simulador de Circuito</h2>
+                <div class="flex flex-col items-center justify-center p-4">
+                    <img src="https://i.postimg.cc/Dz6khb2W/arduino.png" alt="Circuito de Arduino con LEDs y resistencias" class="w-full max-w-sm rounded-lg mb-8">
+                    <div class="led-container w-full max-w-md">
+                        <div class="flex flex-col items-center">
+                            <div class="led-bulb" id="led-13"></div>
+                            <div class="pin-line"></div>
+                            <span class="pin-label">PIN 13</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <div class="led-bulb" id="led-12"></div>
+                            <div class="pin-line"></div>
+                            <span class="pin-label">PIN 12</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <div class="led-bulb" id="led-11"></div>
+                            <div class="pin-line"></div>
+                            <span class="pin-label">PIN 11</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <div class="led-bulb" id="led-10"></div>
+                            <div class="pin-line"></div>
+                            <span class="pin-label">PIN 10</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <div class="led-bulb" id="led-9"></div>
+                            <div class="pin-line"></div>
+                            <span class="pin-label">PIN 9</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <div class="led-bulb" id="led-8"></div>
+                            <div class="pin-line"></div>
+                            <span class="pin-label">PIN 8</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <div class="led-bulb" id="led-7"></div>
+                            <div class="pin-line"></div>
+                            <span class="pin-label">PIN 7</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección de Código y Evaluación -->
+            <div class="card">
+                <h2 class="text-xl font-bold mb-4">Editor de Código</h2>
+                <textarea id="code-editor" class="code-input" spellcheck="false" placeholder="Escribe tu código de Arduino aquí..."></textarea>
+                <div class="flex gap-4 mt-4">
+                    <button onclick="runCode()" class="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg transition duration-300 transform hover:scale-105">
+                        <span id="run-button-text">Ejecutar Código</span>
+                    </button>
+                    <button onclick="submitCode()" class="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-lg transition duration-300 transform hover:scale-105">
+                        Evaluar y Finalizar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Pantalla Final -->
+    <div id="final-screen" class="container hidden">
+        <div id="report-content" class="final-screen">
+            <div id="report-metadata" class="mb-4 text-gray-600 text-left"></div>
+            <h1 class="text-4xl font-bold text-gray-800 mb-4">¡Evaluación Completada!</h1>
+            <p class="text-xl font-bold text-gray-600 mb-2">Puntuación Final:</p>
+            <p id="final-score" class="text-6xl font-extrabold mb-4"></p>
+            
+            <!-- BARRA DE PROGRESO AÑADIDA -->
+            <div class="w-full bg-gray-200 rounded-full h-6 mb-8">
+                <div id="score-progress-bar" class="h-6 rounded-full text-center text-white font-bold text-sm leading-6" style="width: 0%">0%</div>
+            </div>
+
+            <div id="report-summary" class="text-left mt-6 p-4 rounded-lg bg-gray-50">
+                <div class="report-section">
+                    <h3 class="text-lg font-bold text-gray-700">Resumen de Preguntas</h3>
+                    <div id="questions-summary" class="text-sm text-gray-600"></div>
+                </div>
+                <div class="report-section">
+                    <h3 class="text-lg font-bold text-gray-700">Resumen de Código</h3>
+                    <div id="code-summary" class="text-sm text-gray-600"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTONES DE DESCARGA (PDF E IMAGEN) -->
+        <div class="text-center" id="download-section">
+            <p class="mt-8 text-gray-600 font-semibold">Descarga tus resultados para completar el proceso.</p>
+            <div class="flex justify-center mt-4 space-x-4">
+                <button onclick="downloadReport('pdf')" class="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+                    Descargar PDF
+                </button>
+                <button onclick="downloadReport('png')" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-full shadow-lg transition duration-300 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2">
+                    Descargar Imagen
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.jsPDF = window.jspdf.jsPDF;
+        const ledPins = [13, 12, 11, 10, 9, 8, 7];
+        const ledElements = ledPins.map(pin => document.getElementById(`led-${pin}`));
+
+        const sequences = [
+            {
+                name: "Evaluación 1",
+                instructions: [
+                    "1. Enciende el LED en el PIN 13 por 500 ms.",
+                    "2. Apaga el LED del PIN 13 por 100 ms.",
+                    "3. Enciende el LED en el PIN 12 por 500 ms.",
+                    "4. Apaga el LED del PIN 12 por 100 ms.",
+                    "5. Continúa esta secuencia en orden descendente hasta el PIN 7.",
+                    "6. Después de apagar el último LED, espera 500 ms y reinicia el ciclo."
+                ],
+                correctCode: `
+// Configuración inicial del programa
+void setup() {
+  pinMode(13, OUTPUT);
+  pinMode(12, OUTPUT);
+  pinMode(11, OUTPUT);
+  pinMode(10, OUTPUT);
+  pinMode(9, OUTPUT);
+  pinMode(8, OUTPUT);
+  pinMode(7, OUTPUT);
+}
+
+// Bucle principal del programa
+void loop() {
+  digitalWrite(13, HIGH);
+  delay(500);
+  digitalWrite(13, LOW);
+  delay(100);
+
+  digitalWrite(12, HIGH);
+  delay(500);
+  digitalWrite(12, LOW);
+  delay(100);
+
+  digitalWrite(11, HIGH);
+  delay(500);
+  digitalWrite(11, LOW);
+  delay(100);
+
+  digitalWrite(10, HIGH);
+  delay(500);
+  digitalWrite(10, LOW);
+  delay(100);
+
+  digitalWrite(9, HIGH);
+  delay(500);
+  digitalWrite(9, LOW);
+  delay(100);
+
+  digitalWrite(8, HIGH);
+  delay(500);
+  digitalWrite(8, LOW);
+  delay(100);
+
+  digitalWrite(7, HIGH);
+  delay(500);
+  digitalWrite(7, LOW);
+  delay(100);
+
+  delay(500);
+}`.trim()
+            },
+            {
+                name: "Evaluación 2",
+                instructions: [
+                    "1. Enciende los LEDs de los PINs 13 y 12 por 300 ms.",
+                    "2. Apaga los LEDs de los PINs 13 y 12 por 100 ms.",
+                    "3. Enciende los LEDs de los PINs 11 y 10 por 300 ms.",
+                    "4. Apaga los LEDs de los PINs 11 y 10 por 100 ms.",
+                    "5. Enciende los LEDs de los PINs 9 y 8 por 300 ms.",
+                    "6. Apaga los LEDs de los PINs 9 y 8 por 100 ms.",
+                    "7. Enciende el LED del PIN 7 por 300 ms.",
+                    "8. Apaga el LED del PIN 7 por 100 ms.",
+                    "9. Espera 500 ms y reinicia el ciclo."
+                ],
+                correctCode: `
+// Configuración inicial del programa
+void setup() {
+  pinMode(13, OUTPUT);
+  pinMode(12, OUTPUT);
+  pinMode(11, OUTPUT);
+  pinMode(10, OUTPUT);
+  pinMode(9, OUTPUT);
+  pinMode(8, OUTPUT);
+  pinMode(7, OUTPUT);
+}
+
+// Bucle principal del programa
+void loop() {
+  digitalWrite(13, HIGH);
+  digitalWrite(12, HIGH);
+  delay(300);
+  digitalWrite(13, LOW);
+  digitalWrite(12, LOW);
+  delay(100);
+
+  digitalWrite(11, HIGH);
+  digitalWrite(10, HIGH);
+  delay(300);
+  digitalWrite(11, LOW);
+  digitalWrite(10, LOW);
+  delay(100);
+
+  digitalWrite(9, HIGH);
+  digitalWrite(8, HIGH);
+  delay(300);
+  digitalWrite(9, LOW);
+  digitalWrite(8, LOW);
+  delay(100);
+
+  digitalWrite(7, HIGH);
+  delay(300);
+  digitalWrite(7, LOW);
+  delay(100);
+
+  delay(500);
+}`.trim()
+            },
+            {
+                name: "Evaluación 3",
+                instructions: [
+                    "1. Todos los LEDs deben encenderse a la vez por 750 ms.",
+                    "2. Todos los LEDs deben apagarse por 250 ms.",
+                    "3. Repite este ciclo de encendido y apagado de todos los LEDs juntos."
+                ],
+                correctCode: `
+void setup() {
+  pinMode(13, OUTPUT);
+  pinMode(12, OUTPUT);
+  pinMode(11, OUTPUT);
+  pinMode(10, OUTPUT);
+  pinMode(9, OUTPUT);
+  pinMode(8, OUTPUT);
+  pinMode(7, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(13, HIGH);
+  digitalWrite(12, HIGH);
+  digitalWrite(11, HIGH);
+  digitalWrite(10, HIGH);
+  digitalWrite(9, HIGH);
+  digitalWrite(8, HIGH);
+  digitalWrite(7, HIGH);
+  delay(750);
+
+  digitalWrite(13, LOW);
+  digitalWrite(12, LOW);
+  digitalWrite(11, LOW);
+  digitalWrite(10, LOW);
+  digitalWrite(9, LOW);
+  digitalWrite(8, LOW);
+  digitalWrite(7, LOW);
+  delay(250);
+}`.trim()
+            },
+            {
+                name: "Evaluación 4",
+                instructions: [
+                    "1. Enciende los LEDs en los pines 7, 9 y 11.",
+                    "2. Apágalos después de 500 ms.",
+                    "3. Enciende los LEDs en los pines 8, 10 y 12.",
+                    "4. Apágalos después de 500 ms.",
+                    "5. Repite la secuencia en un bucle infinito."
+                ],
+                correctCode: `
+void setup() {
+  pinMode(7, OUTPUT);
+  pinMode(8, OUTPUT);
+  pinMode(9, OUTPUT);
+  pinMode(10, OUTPUT);
+  pinMode(11, OUTPUT);
+  pinMode(12, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(7, HIGH);
+  digitalWrite(9, HIGH);
+  digitalWrite(11, HIGH);
+  delay(500);
+  digitalWrite(7, LOW);
+  digitalWrite(9, LOW);
+  digitalWrite(11, LOW);
+  delay(500);
+
+  digitalWrite(8, HIGH);
+  digitalWrite(10, HIGH);
+  digitalWrite(12, HIGH);
+  delay(500);
+  digitalWrite(8, LOW);
+  digitalWrite(10, LOW);
+  digitalWrite(12, LOW);
+  delay(500);
+}`.trim()
+            },
+            {
+                name: "Evaluación 5",
+                instructions: [
+                    "1. Enciende los LEDs de los extremos (PINs 13 y 7) simultáneamente.",
+                    "2. Apágalos después de 400 ms.",
+                    "3. Enciende el siguiente par hacia el centro (PINs 12 y 8).",
+                    "4. Apágalos después de 400 ms.",
+                    "5. Continúa la secuencia hacia el centro (PINs 11 y 9).",
+                    "6. Apaga los LEDs después de 400 ms y reinicia el ciclo."
+                ],
+                correctCode: `
+void setup() {
+  for (int i = 7; i <= 13; i++) {
+    pinMode(i, OUTPUT);
+  }
+}
+
+void loop() {
+  digitalWrite(13, HIGH);
+  digitalWrite(7, HIGH);
+  delay(400);
+  digitalWrite(13, LOW);
+  digitalWrite(7, LOW);
+  delay(100);
+
+  digitalWrite(12, HIGH);
+  digitalWrite(8, HIGH);
+  delay(400);
+  digitalWrite(12, LOW);
+  digitalWrite(8, LOW);
+  delay(100);
+
+  digitalWrite(11, HIGH);
+  digitalWrite(9, HIGH);
+  delay(400);
+  digitalWrite(11, LOW);
+  digitalWrite(9, LOW);
+  delay(100);
+
+  digitalWrite(10, HIGH);
+  delay(400);
+  digitalWrite(10, LOW);
+  delay(100);
+}`.trim()
+            },
+            {
+                name: "Evaluación 6",
+                instructions: [
+                    "1. Enciende el LED en el PIN 13 por 200 ms.",
+                    "2. Enciende los LEDs de los PINs 12 y 11 por 200 ms.",
+                    "3. Enciende los LEDs de los PINs 10, 9 y 8 por 200 ms.",
+                    "4. Enciende el LED del PIN 7 por 200 ms.",
+                    "5. Después de la secuencia, apaga todos los LEDs y reinicia."
+                ],
+                correctCode: `
+void setup() {
+  for (int i = 7; i <= 13; i++) {
+    pinMode(i, OUTPUT);
+  }
+}
+
+void loop() {
+  digitalWrite(13, HIGH);
+  delay(200);
+  digitalWrite(13, LOW);
+
+  digitalWrite(12, HIGH);
+  digitalWrite(11, HIGH);
+  delay(200);
+  digitalWrite(12, LOW);
+  digitalWrite(11, LOW);
+  
+  digitalWrite(10, HIGH);
+  digitalWrite(9, HIGH);
+  digitalWrite(8, HIGH);
+  delay(200);
+  digitalWrite(10, LOW);
+  digitalWrite(9, LOW);
+  digitalWrite(8, LOW);
+  
+  digitalWrite(7, HIGH);
+  delay(200);
+  digitalWrite(7, LOW);
+  
+  delay(500);
+}`.trim()
+            },
+            {
+                name: "Evaluación 7",
+                instructions: [
+                    "1. Enciende un LED y luego apágalo en un patrón de 'carrera', del PIN 13 al PIN 7.",
+                    "2. Luego, invierte la secuencia y haz que el patrón vaya del PIN 7 al PIN 13.",
+                    "3. Cada LED debe permanecer encendido por 150 ms, con un breve retardo de 50 ms entre cada uno."
+                ],
+                correctCode: `
+void setup() {
+  for (int i = 7; i <= 13; i++) {
+    pinMode(i, OUTPUT);
+  }
+}
+
+void loop() {
+  // Patrón de carrera hacia abajo
+  for (int i = 13; i >= 7; i--) {
+    digitalWrite(i, HIGH);
+    delay(150);
+    digitalWrite(i, LOW);
+    delay(50);
+  }
+
+  // Patrón de carrera hacia arriba
+  for (int i = 8; i <= 13; i++) {
+    digitalWrite(i, HIGH);
+    delay(150);
+    digitalWrite(i, LOW);
+    delay(50);
+  }
+}`.trim()
+            },
+            {
+                name: "Evaluación 8",
+                instructions: [
+                    "1. Enciende todos los LEDs impares (PINs 13, 11, 9, 7) por 500 ms.",
+                    "2. Apágalos y enciende todos los LEDs pares (PINs 12, 10, 8) por 500 ms.",
+                    "3. Repite esta secuencia indefinidamente."
+                ],
+                correctCode: `
+void setup() {
+  for (int i = 7; i <= 13; i++) {
+    pinMode(i, OUTPUT);
+  }
+}
+
+void loop() {
+  digitalWrite(13, HIGH);
+  digitalWrite(11, HIGH);
+  digitalWrite(9, HIGH);
+  digitalWrite(7, HIGH);
+  delay(500);
+  
+  digitalWrite(13, LOW);
+  digitalWrite(11, LOW);
+  digitalWrite(9, LOW);
+  digitalWrite(7, LOW);
+  delay(100);
+
+  digitalWrite(12, HIGH);
+  digitalWrite(10, HIGH);
+  digitalWrite(8, HIGH);
+  delay(500);
+
+  digitalWrite(12, LOW);
+  digitalWrite(10, LOW);
+  digitalWrite(8, LOW);
+  delay(100);
+}`.trim()
+            },
+            {
+                name: "Evaluación 9",
+                instructions: [
+                    "1. Enciende el LED en el PIN 13 y apágalo después de 1 segundo.",
+                    "2. Enciende el LED en el PIN 12 y apágalo después de 2 segundos.",
+                    "3. Enciende el LED en el PIN 11 y apágalo después de 3 segundos.",
+                    "4. Luego, apaga todos los LEDs y repite la secuencia."
+                ],
+                correctCode: `
+void setup() {
+  for (int i = 11; i <= 13; i++) {
+    pinMode(i, OUTPUT);
+  }
+}
+
+void loop() {
+  digitalWrite(13, HIGH);
+  delay(1000);
+  digitalWrite(13, LOW);
+
+  digitalWrite(12, HIGH);
+  delay(2000);
+  digitalWrite(12, LOW);
+  
+  digitalWrite(11, HIGH);
+  delay(3000);
+  digitalWrite(11, LOW);
+  
+  delay(500); // Retardo antes de repetir el ciclo
+}`.trim()
+            },
+            {
+                name: "Evaluación 10",
+                instructions: [
+                    "1. Enciende todos los LEDs.",
+                    "2. Apaga los LEDs de forma secuencial, del PIN 13 al PIN 7.",
+                    "3. Después de que todos los LEDs estén apagados, espera 500 ms y reinicia el ciclo."
+                ],
+                correctCode: `
+void setup() {
+  for (int i = 7; i <= 13; i++) {
+    pinMode(i, OUTPUT);
+  }
+}
+
+void loop() {
+  // Enciende todos los LEDs
+  for (int i = 13; i >= 7; i--) {
+    digitalWrite(i, HIGH);
+  }
+  delay(1000); // Todos encendidos por un segundo
+
+  // Apaga secuencialmente los LEDs
+  for (int i = 13; i >= 7; i--) {
+    digitalWrite(i, LOW);
+    delay(200);
+  }
+
+  delay(500);
+}`.trim()
+            },
+        ];
+
+        const questions = [
+            {
+                text: "¿Por qué se utiliza una resistencia de 220 Ohm para un LED en este circuito?",
+                options: [
+                    { text: "Para aumentar la corriente y el brillo del LED.", isCorrect: false },
+                    { text: "Para proteger el LED del exceso de corriente.", isCorrect: true },
+                    { text: "Para disminuir la tensión en la placa de Arduino.", isCorrect: false }
+                ]
+            },
+            {
+                text: "¿Qué significa el pin 'GND' en la placa de Arduino y para qué sirve?",
+                options: [
+                    { text: "Es un pin de entrada analógica.", isCorrect: false },
+                    { text: "Es el pin de tierra, que completa el circuito eléctrico.", isCorrect: true },
+                    { text: "Es un pin para salidas de alto voltaje.", isCorrect: false }
+                ]
+            },
+            {
+                text: "¿Qué modelo de placa de Arduino es más comúnmente utilizado para proyectos como este?",
+                options: [
+                    { text: "Arduino Mega", isCorrect: false },
+                    { text: "Arduino Leonardo", isCorrect: false },
+                    { text: "Arduino Uno", isCorrect: true }
+                ]
+            },
+            {
+                text: "¿Qué función se utiliza en Arduino para configurar un pin como entrada o salida?",
+                options: [
+                    { text: "digitalWrite()", isCorrect: false },
+                    { text: "pinMode()", isCorrect: true },
+                    { text: "delay()", isCorrect: false }
+                ]
+            },
+            {
+                text: "¿Cuál es el propósito de la función `loop()` en un programa de Arduino?",
+                options: [
+                    { text: "Se ejecuta una sola vez al encender la placa.", isCorrect: false },
+                    { text: "Contiene el código principal que se repite indefinidamente.", isCorrect: true },
+                    { text: "Se utiliza para declarar variables.", isCorrect: false }
+                ]
+            }
+        ];
+
+        let selectedSequence = null;
+        let simulationInterval = null;
+        let studentName = "";
+        let studentKey = "";
+        let isAdmin = false;
+        let currentScore = 0;
+        let codeResponses = [];
+        let questionResponses = [];
+        let currentQuestionIndex = 0;
+        let selectedAnswerIndex = -1;
+
+        function showAlert(title, message) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('modal-message').innerText = message;
+            document.getElementById('alert-modal').classList.remove('hidden');
+        }
+
+        function hideAlert() {
+            document.getElementById('alert-modal').classList.add('hidden');
+        }
+
+        function runCode() {
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+                simulationInterval = null;
+                document.getElementById('run-button-text').innerText = "Ejecutar Código";
+                ledElements.forEach(led => {
+                    led.classList.remove('led-active');
+                    led.style.backgroundColor = '';
+                    led.style.color = '';
+                });
+                return;
+            }
+
+            document.getElementById('run-button-text').innerText = "Detener Simulación";
+            
+            let currentLedIndex = 0;
+            const sequenceLength = ledPins.length;
+
+            simulationInterval = setInterval(() => {
+                ledElements.forEach(led => {
+                    led.classList.remove('led-active');
+                    led.style.backgroundColor = '';
+                    led.style.color = '';
+                });
+
+                if (currentLedIndex < sequenceLength) {
+                    ledElements[currentLedIndex].classList.add('led-active');
+                    ledElements[currentLedIndex].style.backgroundColor = getColorForLed(ledPins[currentLedIndex]);
+                    ledElements[currentLedIndex].style.color = getColorForLed(ledPins[currentLedIndex]);
+                }
+
+                currentLedIndex++;
+                if (currentLedIndex >= sequenceLength) {
+                    setTimeout(() => {
+                        ledElements.forEach(led => {
+                            led.classList.remove('led-active');
+                            led.style.backgroundColor = '';
+                            led.style.color = '';
+                        });
+                    }, 500);
+                    currentLedIndex = 0;
+                }
+            }, 600);
+        }
+
+        function getColorForLed(pin) {
+            switch(pin) {
+                case 13: return '#facc15';
+                case 12: return '#3b82f6';
+                case 11: return '#ef4444';
+                case 10: return '#d946ef';
+                case 9: return '#4ade80';
+                case 8: return '#22d3ee';
+                case 7: return '#e2e8f0';
+                default: return '#e2e8f0';
+            }
+        }
+        
+        function submitCode() {
+            if (!selectedSequence) {
+                showAlert('Error', 'No se ha seleccionado una tarea. Por favor, elige una del menú.');
+                return;
+            }
+
+            const userCode = document.getElementById('code-editor').value;
+                
+            const correctCode = selectedSequence.correctCode
+                .replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+            
+            const normalizeCode = (code) => {
+                let tempCode = code;
+                const pinAssignments = {};
+                const varRegex = /int\s+(\w+)\s*=\s*(\d+)\s*;/g;
+                let match;
+                while ((match = varRegex.exec(tempCode)) !== null) {
+                    pinAssignments[match[1]] = match[2];
+                }
+                
+                for (const [varName, pinValue] of Object.entries(pinAssignments)) {
+                    const varUseRegex = new RegExp(`\\b${varName}\\b`, 'g');
+                    tempCode = tempCode.replace(varUseRegex, pinValue);
+                }
+                
+                return tempCode
+                    .replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+            };
+            
+            const normalizedUserCode = normalizeCode(userCode);
+            const normalizedCorrectCode = normalizeCode(correctCode);
+            
+            const isCorrect = normalizedUserCode === normalizedCorrectCode;
+            const finalScoreCode = isCorrect ? 100 : 0;
+            
+            codeResponses.push({
+                task: selectedSequence.name,
+                userCode: userCode,
+                isCorrect: isCorrect,
+                score: finalScoreCode
+            });
+            
+            currentScore += finalScoreCode;
+            updateScoreDisplay();
+            showFinalScreen();
+        }
+
+        function updateScoreDisplay() {
+            const totalScore = 150;
+            const scoreDisplayElements = [document.getElementById('score-display'), document.getElementById('question-score-display')];
+            scoreDisplayElements.forEach(el => {
+                if (el) el.innerText = `Puntuación: ${currentScore} / ${totalScore}`;
+            });
+        }
+        
+        function updateInstructions(sequenceIndex) {
+            selectedSequence = sequences[sequenceIndex];
+            const instructionsList = document.getElementById('instructions-list');
+            instructionsList.innerHTML = '';
+            selectedSequence.instructions.forEach(instruction => {
+                const li = document.createElement('li');
+                li.innerText = instruction;
+                instructionsList.appendChild(li);
+            });
+        }
+
+        function populateSequenceSelector(preselectedIndex) {
+            const selector = document.getElementById('sequence-selector');
+            selector.innerHTML = '';
+            
+            const taskMapping = [
+                { name: "Evaluación 1 (Claves 1, 11, 21, 31)", index: 0 },
+                { name: "Evaluación 2 (Claves 2, 12, 22, 32)", index: 1 },
+                { name: "Evaluación 3 (Claves 3, 13, 23, 33)", index: 2 },
+                { name: "Evaluación 4 (Claves 4, 14, 24)", index: 3 },
+                { name: "Evaluación 5 (Claves 5, 15, 25)", index: 4 },
+                { name: "Evaluación 6 (Claves 6, 16, 26)", index: 5 },
+                { name: "Evaluación 7 (Claves 7, 17, 27)", index: 6 },
+                { name: "Evaluación 8 (Claves 8, 18, 28)", index: 7 },
+                { name: "Evaluación 9 (Claves 9, 19, 29)", index: 8 },
+                { name: "Evaluación 10 (Claves 10, 20, 30)", index: 9 },
+            ];
+
+            taskMapping.forEach(task => {
+                const option = document.createElement('option');
+                option.value = task.index;
+                option.innerText = task.name;
+                selector.appendChild(option);
+            });
+
+            selector.selectedIndex = preselectedIndex;
+            selector.disabled = !isAdmin;
+
+            if (isAdmin) {
+                selector.addEventListener('change', (event) => {
+                    const newIndex = parseInt(event.target.value);
+                    updateInstructions(newIndex);
+                    document.getElementById('code-editor').value = sequences[newIndex].correctCode;
+                });
+            }
+            
+            updateInstructions(preselectedIndex);
+        }
+
+        function startEvaluation() {
+            const keyInput = document.getElementById('student-key').value.trim();
+            const nameInput = document.getElementById('student-name').value.trim();
+
+            if (!keyInput || !nameInput) {
+                showAlert('Error', 'Por favor, completa todos los campos.');
+                return;
+            }
+
+            const parsedKey = parseInt(keyInput);
+            
+            if (parsedKey === 5686) {
+                isAdmin = true;
+                studentKey = "Admin";
+            } else if (isNaN(parsedKey) || parsedKey < 1 || parsedKey > 33) {
+                showAlert('Error', 'La clave del estudiante debe ser un número entre 1 y 33 (o la clave de administrador 5686).');
+                return;
+            } else {
+                studentKey = keyInput;
+                isAdmin = false;
+            }
+
+            const nameParts = nameInput.split(' ');
+            if (nameParts.length < 2) {
+                showAlert('Error', 'Por favor, ingresa tu nombre completo (nombre y apellidos).');
+                return;
+            }
+            
+            studentName = nameInput;
+            document.getElementById('login-screen').classList.add('hidden');
+            
+            showQuestionScreen();
+        }
+        
+        function showQuestionScreen() {
+            document.getElementById('question-screen').classList.remove('hidden');
+            currentQuestionIndex = 0;
+            displayCurrentQuestion();
+            updateScoreDisplay();
+        }
+
+        function displayCurrentQuestion() {
+            const questionData = questions[currentQuestionIndex];
+            document.getElementById('question-number').innerText = `Pregunta ${currentQuestionIndex + 1} de ${questions.length}`;
+            document.getElementById('current-question').innerText = questionData.text;
+            const optionsContainer = document.getElementById('answer-options');
+            optionsContainer.innerHTML = '';
+            questionData.options.forEach((option, index) => {
+                const button = document.createElement('button');
+                button.innerText = option.text;
+                button.className = 'bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-4 rounded-lg text-left transition duration-300';
+                button.onclick = () => selectAnswer(index, event.currentTarget);
+                optionsContainer.appendChild(button);
+            });
+            document.getElementById('question-feedback').classList.add('hidden');
+        }
+
+        function selectAnswer(index, buttonElement) {
+            selectedAnswerIndex = index;
+            const options = document.getElementById('answer-options').children;
+            for (let i = 0; i < options.length; i++) {
+                options[i].classList.remove('bg-blue-500', 'text-white');
+                options[i].classList.add('bg-gray-200', 'text-gray-800');
+            }
+            buttonElement.classList.remove('bg-gray-200', 'text-gray-800');
+            buttonElement.classList.add('bg-blue-500', 'text-white');
+        }
+
+        function submitQuestion() {
+            if (selectedAnswerIndex === -1) {
+                showAlert('Atención', 'Por favor, selecciona una respuesta.');
+                return;
+            }
+
+            const currentQuestion = questions[currentQuestionIndex];
+            const selectedOption = currentQuestion.options[selectedAnswerIndex];
+            const isCorrect = selectedOption.isCorrect;
+            
+            questionResponses.push({
+                question: currentQuestion.text,
+                userAnswer: selectedOption.text,
+                correctAnswer: currentQuestion.options.find(opt => opt.isCorrect).text,
+                isCorrect: isCorrect,
+                score: isCorrect ? 10 : 0
+            });
+
+            const feedbackText = document.getElementById('question-feedback-text');
+            const feedbackContainer = document.getElementById('question-feedback');
+            feedbackContainer.classList.remove('hidden');
+
+            if (isCorrect) {
+                currentScore += 10;
+                feedbackText.innerText = '¡Respuesta correcta! Ganaste 10 puntos.';
+                feedbackText.className = 'text-green-600 font-bold';
+            } else {
+                feedbackText.innerHTML = `Respuesta incorrecta. La respuesta correcta era: <strong class="text-blue-600">${currentQuestion.options.find(opt => opt.isCorrect).text}</strong>`;
+                feedbackText.className = 'text-red-600 font-bold';
+            }
+
+            updateScoreDisplay();
+
+            setTimeout(() => {
+                currentQuestionIndex++;
+                selectedAnswerIndex = -1;
+                if (currentQuestionIndex < questions.length) {
+                    displayCurrentQuestion();
+                } else {
+                    showCodeEvaluationScreen();
+                }
+            }, 2500);
+        }
+
+        function showCodeEvaluationScreen() {
+            document.getElementById('question-screen').classList.add('hidden');
+            document.getElementById('evaluation-screen').classList.remove('hidden');
+            
+            let taskIndex = 0;
+            if (!isAdmin) {
+                taskIndex = (parseInt(studentKey) - 1) % 10;
+            }
+            
+            if (isAdmin) {
+                document.getElementById('admin-message').classList.remove('hidden');
+            }
+
+            populateSequenceSelector(taskIndex);
+            document.getElementById('code-editor').value = isAdmin ? sequences[taskIndex].correctCode : '';
+        }
+
+        function showFinalScreen() {
+            document.getElementById('evaluation-screen').classList.add('hidden');
+            document.getElementById('question-screen').classList.add('hidden');
+            document.getElementById('final-screen').classList.remove('hidden');
+            
+            const date = new Date().toLocaleString('es-ES', { dateStyle: 'long', timeStyle: 'short' });
+            document.getElementById('report-metadata').innerHTML = `
+                <p class="text-lg"><strong>Estudiante:</strong> ${studentName}</p>
+                <p class="text-lg"><strong>Clave:</strong> ${studentKey}</p>
+                <p class="text-sm text-gray-400"><strong>Fecha de finalización:</strong> ${date}</p>
+            `;
+            const totalScore = 150;
+            const finalScoreElement = document.getElementById('final-score');
+            finalScoreElement.innerText = `${currentScore} / ${totalScore}`;
+
+            // Lógica de la barra de progreso
+            const progressBar = document.getElementById('score-progress-bar');
+            const percentage = Math.round((currentScore / totalScore) * 100);
+            
+            setTimeout(() => { // Pequeño delay para la animación
+                progressBar.style.width = `${percentage}%`;
+                progressBar.innerText = `${percentage}%`;
+
+                if (percentage < 60) {
+                    progressBar.style.backgroundColor = '#ef4444'; // Rojo
+                    finalScoreElement.style.color = '#ef4444';
+                } else if (percentage < 80) {
+                    progressBar.style.backgroundColor = '#f59e0b'; // Ámbar
+                    finalScoreElement.style.color = '#f59e0b';
+                } else {
+                    progressBar.style.backgroundColor = '#22c55e'; // Verde
+                    finalScoreElement.style.color = '#22c55e';
+                }
+            }, 100);
+
+
+            // Desglose de Punteo en el informe
+            const questionsSummary = document.getElementById('questions-summary');
+            questionsSummary.innerHTML = `
+                <p class="text-sm font-semibold mb-4">Puntuación en preguntas: ${questionResponses.reduce((sum, res) => sum + res.score, 0)} / 50</p>
+                <ul class="list-disc list-inside space-y-4">
+                    ${questionResponses.map(res => `
+                        <li>
+                            <p><strong>Pregunta:</strong> ${res.question}</p>
+                            <p><strong>Tu respuesta:</strong> 
+                                <span class="${res.isCorrect ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}">${res.userAnswer}</span> 
+                                <strong class="${res.isCorrect ? 'text-green-600' : 'text-red-600'}">(+${res.score} puntos)</strong>
+                            </p>
+                            ${!res.isCorrect ? `<p><strong>Respuesta correcta:</strong> <span class="text-blue-600">${res.correctAnswer}</span></p>` : ''}
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+            
+            const codeSummary = document.getElementById('code-summary');
+            codeSummary.innerHTML = `
+                <p class="text-sm font-semibold mb-4">Puntuación en código: ${codeResponses.reduce((sum, res) => sum + res.score, 0)} / 100</p>
+                <ul class="list-disc list-inside">
+                    ${codeResponses.map(res => `
+                        <li>
+                            <p><strong>Tarea:</strong> ${res.task} (<span class="${res.isCorrect ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}">${res.isCorrect ? 'Correcto' : 'Incorrecto'}</span>) - <strong class="${res.isCorrect ? 'text-green-600' : 'text-red-600'}">Puntuación: ${res.score} / 100 puntos</strong></p>
+                            <p class="mt-2 mb-1 font-semibold text-gray-800">Tu Código:</p>
+                            <pre class="code-block text-sm">${res.userCode.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+        
+        function downloadReport(format) {
+            const reportContent = document.getElementById('report-content');
+            const downloadSection = document.getElementById('download-section');
+            
+            downloadSection.style.display = 'none';
+
+            html2canvas(reportContent, { scale: 2 }).then(canvas => {
+                if (format === 'png') {
+                    const imgData = canvas.toDataURL('image/png');
+                    const link = document.createElement('a');
+                    link.download = `reporte_evaluacion_${studentName.replace(/\s/g, '_')}.png`;
+                    link.href = imgData;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                } else if (format === 'pdf') {
+                    const { jsPDF } = window.jspdf;
+                    const imgData = canvas.toDataURL('image/png');
+                    const pdf = new jsPDF('p', 'mm', 'a4');
+                    const imgWidth = 210;
+                    const pageHeight = 297;
+                    const imgHeight = canvas.height * imgWidth / canvas.width;
+                    let heightLeft = imgHeight;
+                    let position = 0;
+
+                    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                    heightLeft -= pageHeight;
+
+                    while (heightLeft > 0) {
+                        position -= pageHeight;
+                        pdf.addPage();
+                        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+                        heightLeft -= pageHeight;
+                    }
+
+                    pdf.save(`reporte_evaluacion_${studentName.replace(/\s/g, '_')}.pdf`);
+                }
+                
+                downloadSection.style.display = 'block';
+            });
+        }
+    </script>
+</body>
+</html>
